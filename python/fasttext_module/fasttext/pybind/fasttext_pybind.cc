@@ -143,7 +143,15 @@ PYBIND11_MODULE(fasttext_pybind, m) {
 
   py::enum_<fasttext::metric_name>(m, "metric_name")
       .value("f1score", fasttext::metric_name::f1score)
-      .value("labelf1score", fasttext::metric_name::labelf1score)
+      .value("f1scoreLabel", fasttext::metric_name::f1scoreLabel)
+      .value("precisionAtRecall", fasttext::metric_name::precisionAtRecall)
+      .value(
+          "precisionAtRecallLabel",
+          fasttext::metric_name::precisionAtRecallLabel)
+      .value("recallAtPrecision", fasttext::metric_name::recallAtPrecision)
+      .value(
+          "recallAtPrecisionLabel",
+          fasttext::metric_name::recallAtPrecisionLabel)
       .export_values();
 
   m.def(
@@ -185,6 +193,35 @@ PYBIND11_MODULE(fasttext_pybind, m) {
             {sizeof(fasttext::real) * m.size(1),
              sizeof(fasttext::real) * (int64_t)1});
       });
+
+  py::class_<fasttext::Meter>(m, "Meter")
+      .def(py::init<bool>())
+      .def("scoreVsTrue", &fasttext::Meter::scoreVsTrue)
+      .def(
+          "precisionRecallCurveLabel",
+          (std::vector<std::pair<double, double>>(fasttext::Meter::*)(int32_t)
+               const) &
+              fasttext::Meter::precisionRecallCurve)
+      .def(
+          "precisionRecallCurve",
+          (std::vector<std::pair<double, double>>(fasttext::Meter::*)() const) &
+              fasttext::Meter::precisionRecallCurve)
+      .def(
+          "precisionAtRecallLabel",
+          (double (fasttext::Meter::*)(int32_t, double) const) &
+              fasttext::Meter::precisionAtRecall)
+      .def(
+          "precisionAtRecall",
+          (double (fasttext::Meter::*)(double) const) &
+              fasttext::Meter::precisionAtRecall)
+      .def(
+          "recallAtPrecisionLabel",
+          (double (fasttext::Meter::*)(int32_t, double) const) &
+              fasttext::Meter::recallAtPrecision)
+      .def(
+          "recallAtPrecision",
+          (double (fasttext::Meter::*)(double) const) &
+              fasttext::Meter::recallAtPrecision);
 
   py::class_<fasttext::FastText>(m, "fasttext")
       .def(py::init<>())
@@ -231,19 +268,32 @@ PYBIND11_MODULE(fasttext_pybind, m) {
           [](fasttext::FastText& m, std::string s) { m.saveModel(s); })
       .def(
           "test",
-          [](fasttext::FastText& m, 
-            const std::string filename, 
-            int32_t k,
-            fasttext::real threshold) {
+          [](fasttext::FastText& m,
+             const std::string& filename,
+             int32_t k,
+             fasttext::real threshold) {
             std::ifstream ifs(filename);
             if (!ifs.is_open()) {
               throw std::invalid_argument("Test file cannot be opened!");
             }
-            fasttext::Meter meter;
+            fasttext::Meter meter(false);
             m.test(ifs, k, threshold, meter);
             ifs.close();
             return std::tuple<int64_t, double, double>(
                 meter.nexamples(), meter.precision(), meter.recall());
+          })
+      .def(
+          "getMeter",
+          [](fasttext::FastText& m, const std::string& filename, int32_t k) {
+            std::ifstream ifs(filename);
+            if (!ifs.is_open()) {
+              throw std::invalid_argument("Test file cannot be opened!");
+            }
+            fasttext::Meter meter(true);
+            m.test(ifs, k, 0.0, meter);
+            ifs.close();
+
+            return meter;
           })
       .def(
           "getSentenceVector",
@@ -397,7 +447,7 @@ PYBIND11_MODULE(fasttext_pybind, m) {
             if (!ifs.is_open()) {
               throw std::invalid_argument("Test file cannot be opened!");
             }
-            fasttext::Meter meter;
+            fasttext::Meter meter(false);
             m.test(ifs, k, threshold, meter);
             std::shared_ptr<const fasttext::Dictionary> d = m.getDictionary();
             std::unordered_map<std::string, py::dict> returnedValue;
@@ -412,13 +462,18 @@ PYBIND11_MODULE(fasttext_pybind, m) {
           })
       .def(
           "getWordId",
-          [](fasttext::FastText& m, const std::string word) {
+          [](fasttext::FastText& m, const std::string& word) {
             return m.getWordId(word);
           })
       .def(
           "getSubwordId",
           [](fasttext::FastText& m, const std::string word) {
             return m.getSubwordId(word);
+          })
+      .def(
+          "getLabelId",
+          [](fasttext::FastText& m, const std::string& label) {
+            return m.getLabelId(label);
           })
       .def(
           "getInputVector",
